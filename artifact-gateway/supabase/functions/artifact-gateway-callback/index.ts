@@ -41,15 +41,19 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const jobId = typeof body.jobId === "string" ? body.jobId : "";
     const callbackToken = typeof body.callbackToken === "string" ? body.callbackToken : "";
+    const action = body.action === "authorize" ? "authorize" : "complete";
     const status = body.status === "completed" || body.status === "failed" ? body.status : "";
-    if (!jobId || !callbackToken || !status) return respond(400, { error: "Invalid callback payload" });
+    const userId = typeof body.userId === "string" ? body.userId : "";
+    if (!jobId || !callbackToken || (action === "complete" && !status) || (action === "authorize" && !userId)) {
+      return respond(400, { error: "Invalid callback payload" });
+    }
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const { data: job, error: readError } = await admin
       .from("artifact_gateway_jobs")
-      .select("id,status,callback_token_hash,callback_consumed_at,expected_sha256,storage_path,expires_at")
+      .select("id,user_id,status,callback_token_hash,callback_consumed_at,source_url,expected_sha256,max_bytes,storage_bucket,storage_path,expires_at")
       .eq("id", jobId)
       .maybeSingle();
     if (readError) throw readError;
@@ -59,6 +63,23 @@ Deno.serve(async (req: Request) => {
 
     const tokenHash = await sha256(callbackToken);
     if (!safeEqualHex(tokenHash, job.callback_token_hash)) return respond(401, { error: "Invalid callback token" });
+
+    if (action === "authorize") {
+      if (job.user_id !== userId) return respond(403, { error: "Job user mismatch" });
+      if (job.status !== "running") return respond(409, { error: `Job is ${job.status}, not running` });
+      return respond(200, {
+        ok: true,
+        job: {
+          id: job.id,
+          userId: job.user_id,
+          sourceUrl: job.source_url,
+          expectedSha256: job.expected_sha256,
+          maxBytes: job.max_bytes,
+          storageBucket: job.storage_bucket,
+          storagePath: job.storage_path,
+        },
+      });
+    }
 
     let finalStatus: "completed" | "failed" = status;
     let errorMessage = typeof body.error === "string" ? body.error.slice(0, 2000) : null;
