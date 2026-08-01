@@ -67,6 +67,16 @@ type CallbackPayload = {
   error?: string;
 };
 
+type AuthorizedJob = {
+  id: string;
+  userId: string;
+  sourceUrl: string;
+  expectedSha256: string | null;
+  maxBytes: number;
+  storageBucket: string;
+  storagePath: string;
+};
+
 function json(res: ServerResponse, status: number, payload: unknown): void {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
@@ -258,6 +268,39 @@ async function sendCallback(payload: CallbackPayload): Promise<void> {
   }
 }
 
+async function authorizeJob(body: JobRequest): Promise<AuthorizedJob> {
+  const response = await fetch(CALLBACK_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: "authorize",
+      jobId: body.jobId,
+      userId: body.userId,
+      callbackToken: body.callback.token,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Job authorization failed with HTTP ${response.status}: ${text.slice(0, 300)}`);
+  }
+  const payload = JSON.parse(text) as { job?: AuthorizedJob };
+  if (!payload.job) throw new Error("Job authorization response is incomplete");
+  return payload.job;
+}
+
+function assertAuthorizedRequest(body: JobRequest, job: AuthorizedJob): void {
+  if (job.id !== body.jobId || job.userId !== body.userId) throw new Error("Authorized job identity mismatch");
+  if (job.sourceUrl !== body.sourceUrl) throw new Error("Authorized source URL mismatch");
+  if (job.maxBytes !== body.maxBytes) throw new Error("Authorized maxBytes mismatch");
+  if (job.storageBucket !== body.upload.bucket || job.storagePath !== body.upload.path) {
+    throw new Error("Authorized upload destination mismatch");
+  }
+  const requestedHash = body.expectedSha256?.toLowerCase() || null;
+  const authorizedHash = job.expectedSha256?.toLowerCase() || null;
+  if (requestedHash !== authorizedHash) throw new Error("Authorized checksum mismatch");
+}
+
 function assertJobRequest(value: unknown): asserts value is JobRequest {
   if (!value || typeof value !== "object") throw new Error("Invalid request body");
   const body = value as Partial<JobRequest>;
@@ -301,9 +344,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     body = parsed;
     if (body.userId !== user.id) throw new Error("Job user does not match bearer token");
 
-    const downloaded = await fetchWithValidatedRedirects(body.sourceUrl, Math.min(body.maxBytes, MAX_HARD_BYTES));
-    if (body.expectedSha256 && !equalHex(body.expectedSha256, downloaded.sha256)) {
-      throw new Error(`SHA-256 mismatch: expected ${body.expectedSha256}, got ${downloaded.sha256}`);
+    const authorizedJob = await authorizeJob(body);
+    assertAuthorizedRequest(body, authorizedJob);
+
+    const downloaded = await fetchWithValidatedRedirects(
+      authorizedJob.sourceUrl,
+      Math.min(authorizedJob.maxBytes, MAX_HARD_BYTES),
+    );
+    if (authorizedJob.expectedSha256 && !equalHex(authorizedJob.expectedSha256, downloaded.sha256)) {
+      throw new Error(`SHA-256 mismatch: expected ${authorizedJob.expectedSha256}, got ${downloaded.sha256}`);
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
