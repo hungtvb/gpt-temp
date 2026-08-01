@@ -76,11 +76,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (finalStatus === "failed") {
-      await admin.storage.from(BUCKET).remove([job.storage_path]);
-    }
-
-    const { error: updateError } = await admin
+    const { data: updatedJob, error: updateError } = await admin
       .from("artifact_gateway_jobs")
       .update({
         status: finalStatus,
@@ -93,8 +89,15 @@ Deno.serve(async (req: Request) => {
         completed_at: new Date().toISOString(),
       })
       .eq("id", jobId)
-      .is("callback_consumed_at", null);
+      .is("callback_consumed_at", null)
+      .select("id")
+      .maybeSingle();
     if (updateError) throw updateError;
+    if (!updatedJob) return respond(409, { error: "Callback token already consumed" });
+
+    if (finalStatus === "failed") {
+      await admin.storage.from(BUCKET).remove([job.storage_path]);
+    }
 
     return respond(200, { ok: true, jobId, status: finalStatus });
   } catch (error) {
