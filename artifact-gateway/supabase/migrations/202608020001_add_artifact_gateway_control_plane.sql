@@ -59,13 +59,13 @@ create policy artifact_gateway_jobs_select_own
 on public.artifact_gateway_jobs
 for select
 to authenticated
-using (auth.uid() = user_id);
+using ((select auth.uid()) = user_id);
 
 create policy artifact_gateway_jobs_delete_own_finished
 on public.artifact_gateway_jobs
 for delete
 to authenticated
-using (auth.uid() = user_id and status in ('completed','failed','expired'));
+using ((select auth.uid()) = user_id and status in ('completed','failed','expired'));
 
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('artifact-gateway', 'artifact-gateway', false, 104857600)
