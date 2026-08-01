@@ -108,12 +108,15 @@ async function triggerWorker(params: {
   uploadToken: string;
   callbackToken: string;
 }) {
-  const { error: runningError } = await params.admin
+  const { data: runningJob, error: runningError } = await params.admin
     .from("artifact_gateway_jobs")
     .update({ status: "running", started_at: new Date().toISOString() })
     .eq("id", params.jobId)
-    .eq("status", "queued");
+    .eq("status", "queued")
+    .select("id")
+    .maybeSingle();
   if (runningError) throw runningError;
+  if (!runningJob) throw new Error("Job could not transition to running");
 
   try {
     const response = await fetch(WORKER_URL, {
@@ -146,8 +149,7 @@ async function triggerWorker(params: {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Worker invocation failed";
-    await params.admin.storage.from(BUCKET).remove([params.storagePath]);
-    await params.admin
+    const { data: failedJob } = await params.admin
       .from("artifact_gateway_jobs")
       .update({
         status: "failed",
@@ -155,7 +157,12 @@ async function triggerWorker(params: {
         completed_at: new Date().toISOString(),
       })
       .eq("id", params.jobId)
-      .in("status", ["queued", "running"]);
+      .in("status", ["queued", "running"])
+      .select("id")
+      .maybeSingle();
+    if (failedJob) {
+      await params.admin.storage.from(BUCKET).remove([params.storagePath]);
+    }
   }
 }
 
