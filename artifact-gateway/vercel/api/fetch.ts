@@ -8,6 +8,9 @@ const SUPABASE_URL = "https://kapfoxuuuprmuersmoqf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_IBAYWhrjCNzT6SG80M1sRw_tkZo_ZPo";
 const MAX_HARD_BYTES = 50 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
+const ARTIFACT_BUCKET = "artifact-gateway";
+const CALLBACK_URL = `${SUPABASE_URL}/functions/v1/artifact-gateway-callback`;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const EXACT_HOSTS = new Set([
   "github.com",
@@ -115,7 +118,14 @@ function normalizeIpv6(address: string): string {
 function isPrivateIpv6(address: string): boolean {
   const value = normalizeIpv6(address);
   if (value === "::" || value === "::1") return true;
-  if (value.startsWith("fc") || value.startsWith("fd") || value.startsWith("fe8") || value.startsWith("fe9") || value.startsWith("fea") || value.startsWith("feb")) return true;
+  if (
+    value.startsWith("fc") ||
+    value.startsWith("fd") ||
+    value.startsWith("fe8") ||
+    value.startsWith("fe9") ||
+    value.startsWith("fea") ||
+    value.startsWith("feb")
+  ) return true;
   if (value.startsWith("ff")) return true;
   if (value.startsWith("2001:db8")) return true;
   const mapped = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
@@ -235,8 +245,8 @@ function equalHex(left: string, right: string): boolean {
   return timingSafeEqual(Buffer.from(left.toLowerCase(), "hex"), Buffer.from(right.toLowerCase(), "hex"));
 }
 
-async function sendCallback(payload: CallbackPayload, callbackUrl: string): Promise<void> {
-  const response = await fetch(callbackUrl, {
+async function sendCallback(payload: CallbackPayload): Promise<void> {
+  const response = await fetch(CALLBACK_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
@@ -252,8 +262,19 @@ function assertJobRequest(value: unknown): asserts value is JobRequest {
   if (!value || typeof value !== "object") throw new Error("Invalid request body");
   const body = value as Partial<JobRequest>;
   if (!body.jobId || !body.userId || !body.sourceUrl) throw new Error("Missing job identifiers or sourceUrl");
+  if (!UUID_PATTERN.test(body.jobId) || !UUID_PATTERN.test(body.userId)) throw new Error("Invalid jobId or userId");
+  if (body.sourceUrl.length > 4000) throw new Error("sourceUrl is too long");
   if (!body.upload?.bucket || !body.upload.path || !body.upload.token) throw new Error("Missing signed upload parameters");
+  if (body.upload.bucket !== ARTIFACT_BUCKET) throw new Error("Invalid upload bucket");
+  if (
+    !body.upload.path.startsWith(`${body.userId}/${body.jobId}/`) ||
+    body.upload.path.includes("..") ||
+    body.upload.path.length > 1024
+  ) throw new Error("Invalid upload path");
+  if (body.upload.token.length < 20 || body.upload.token.length > 4096) throw new Error("Invalid upload token");
   if (!body.callback?.url || !body.callback.token) throw new Error("Missing callback parameters");
+  if (body.callback.url !== CALLBACK_URL) throw new Error("Invalid callback URL");
+  if (!/^[A-Za-z0-9_-]{40,128}$/.test(body.callback.token)) throw new Error("Invalid callback token");
   if (!Number.isInteger(body.maxBytes) || Number(body.maxBytes) < 1 || Number(body.maxBytes) > MAX_HARD_BYTES) {
     throw new Error(`maxBytes must be between 1 and ${MAX_HARD_BYTES}`);
   }
@@ -296,18 +317,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
     if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
 
-    await sendCallback(
-      {
-        jobId: body.jobId,
-        callbackToken: body.callback.token,
-        status: "completed",
-        actualSha256: downloaded.sha256,
-        sizeBytes: downloaded.bytes.byteLength,
-        contentType: downloaded.contentType,
-        resolvedUrl: downloaded.resolvedUrl,
-      },
-      body.callback.url,
-    );
+    await sendCallback({
+      jobId: body.jobId,
+      callbackToken: body.callback.token,
+      status: "completed",
+      actualSha256: downloaded.sha256,
+      sizeBytes: downloaded.bytes.byteLength,
+      contentType: downloaded.contentType,
+      resolvedUrl: downloaded.resolvedUrl,
+    });
 
     json(res, 200, {
       ok: true,
@@ -319,15 +337,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const message = error instanceof Error ? error.message : "Unknown worker error";
     if (body?.callback?.url && body.callback.token && body.jobId) {
       try {
-        await sendCallback(
-          {
-            jobId: body.jobId,
-            callbackToken: body.callback.token,
-            status: "failed",
-            error: message.slice(0, 2000),
-          },
-          body.callback.url,
-        );
+        await sendCallback({
+          jobId: body.jobId,
+          callbackToken: body.callback.token,
+          status: "failed",
+          error: message.slice(0, 2000),
+        });
       } catch {
         // Avoid leaking callback details or replacing the primary error.
       }
