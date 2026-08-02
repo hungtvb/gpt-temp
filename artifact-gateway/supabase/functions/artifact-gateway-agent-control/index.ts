@@ -5,7 +5,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PUBLISHABLE_KEY =
   Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
-  "sb_publishable_IBAYWhrjCNzT6SG80M1sRw_tkZo_ZPo";
+  "sb_publishable_LZFN0q5S4Yj800B-0w9rcA_1YmdDfB2";
 const WORKER_URL =
   Deno.env.get("ARTIFACT_GATEWAY_WORKER_URL") ??
   "https://artifact-gateway-worker.vercel.app/api/fetch";
@@ -357,7 +357,8 @@ Deno.serve(async (req: Request) => {
     return json(200, {
       service: "artifact-gateway-agent-control",
       status: "ok",
-      version: "0.2.1",
+      version: "0.3.0",
+      project: "clxyqwwdqhipkiuyagsj",
     });
   }
   if (req.method !== "POST") {
@@ -458,7 +459,7 @@ Deno.serve(async (req: Request) => {
           callback_token_hash: callbackTokenHash,
           metadata: {
             worker: "vercel",
-            version: "0.2.1",
+            version: "0.3.0",
             agent: row.name,
             agent_request_id: body.requestId,
           },
