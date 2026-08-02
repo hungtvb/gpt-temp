@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 const CONTROL_URL =
   process.env.ARTIFACT_GATEWAY_CONTROL_URL ??
-  "https://kapfoxuuuprmuersmoqf.supabase.co/functions/v1/artifact-gateway-agent-control";
+  "https://clxyqwwdqhipkiuyagsj.supabase.co/functions/v1/artifact-gateway-agent-control";
 const AGENT_KEY = process.env.ARTIFACT_GATEWAY_AGENT_KEY;
 const MAX_CHUNK_SIZE = 2 * 1024 * 1024;
 
@@ -42,9 +42,7 @@ async function callControl(body) {
   }
 
   if (!response.ok) {
-    const error = new Error(
-      `Agent control returned ${response.status}`,
-    );
+    const error = new Error(`Agent control returned ${response.status}`);
     error.status = response.status;
     error.payload = payload;
     throw error;
@@ -68,16 +66,13 @@ export default async function handler(req, res) {
       return sendJson(res, 200, {
         service: "artifact-gateway-agent-bridge",
         status: "ok",
-        version: "0.2.2",
+        version: "0.3.0",
+        project: "clxyqwwdqhipkiuyagsj",
       });
     }
 
     if (action === "setup") {
-      return sendJson(
-        res,
-        200,
-        await callControl({ action: "setup" }),
-      );
+      return sendJson(res, 200, await callControl({ action: "setup" }));
     }
 
     if (action === "create") {
@@ -91,8 +86,7 @@ export default async function handler(req, res) {
           sourceUrl: queryValue(url, "sourceUrl"),
           filename: queryValue(url, "filename"),
           expectedSha256: queryValue(url, "expectedSha256"),
-          maxBytes:
-            maxBytesRaw == null ? undefined : Number(maxBytesRaw),
+          maxBytes: maxBytesRaw == null ? undefined : Number(maxBytesRaw),
         }),
       );
     }

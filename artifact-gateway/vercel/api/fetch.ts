@@ -4,8 +4,12 @@ import { isIP } from "node:net";
 import { createClient } from "@supabase/supabase-js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-const SUPABASE_URL = "https://kapfoxuuuprmuersmoqf.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_IBAYWhrjCNzT6SG80M1sRw_tkZo_ZPo";
+const SUPABASE_URL =
+  process.env.ARTIFACT_GATEWAY_SUPABASE_URL ??
+  "https://clxyqwwdqhipkiuyagsj.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY =
+  process.env.ARTIFACT_GATEWAY_SUPABASE_PUBLISHABLE_KEY ??
+  "sb_publishable_LZFN0q5S4Yj800B-0w9rcA_1YmdDfB2";
 const MAX_HARD_BYTES = 50 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 const ARTIFACT_BUCKET = "artifact-gateway";
@@ -191,7 +195,7 @@ async function fetchWithValidatedRedirects(sourceUrl: string, maxBytes: number):
       method: "GET",
       redirect: "manual",
       headers: {
-        "user-agent": "hungtvb-artifact-gateway/0.1",
+        "user-agent": "hungtvb-artifact-gateway/0.3",
         accept: "application/octet-stream,*/*;q=0.8",
       },
       signal: AbortSignal.timeout(45_000),
@@ -292,7 +296,7 @@ async function authorizeJob(body: JobRequest): Promise<AuthorizedJob> {
 function assertAuthorizedRequest(body: JobRequest, job: AuthorizedJob): void {
   if (job.id !== body.jobId || job.userId !== body.userId) throw new Error("Authorized job identity mismatch");
   if (job.sourceUrl !== body.sourceUrl) throw new Error("Authorized source URL mismatch");
-  if (job.maxBytes !== body.maxBytes) throw new Error("Authorized maxBytes mismatch");
+  if (Number(job.maxBytes) !== body.maxBytes) throw new Error("Authorized maxBytes mismatch");
   if (job.storageBucket !== body.upload.bucket || job.storagePath !== body.upload.path) {
     throw new Error("Authorized upload destination mismatch");
   }
@@ -328,7 +332,12 @@ function assertJobRequest(value: unknown): asserts value is JobRequest {
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === "GET") {
-    json(res, 200, { service: "artifact-gateway-worker", status: "ok", version: "0.1.0" });
+    json(res, 200, {
+      service: "artifact-gateway-worker",
+      status: "ok",
+      version: "0.3.0",
+      project: "clxyqwwdqhipkiuyagsj",
+    });
     return;
   }
   if (req.method !== "POST") {
@@ -349,7 +358,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     const downloaded = await fetchWithValidatedRedirects(
       authorizedJob.sourceUrl,
-      Math.min(authorizedJob.maxBytes, MAX_HARD_BYTES),
+      Math.min(Number(authorizedJob.maxBytes), MAX_HARD_BYTES),
     );
     if (authorizedJob.expectedSha256 && !equalHex(authorizedJob.expectedSha256, downloaded.sha256)) {
       throw new Error(`SHA-256 mismatch: expected ${authorizedJob.expectedSha256}, got ${downloaded.sha256}`);
