@@ -76,7 +76,7 @@ revoke all on table public.artifact_gateway_transfer_sessions
 create unique index if not exists
   artifact_gateway_jobs_agent_request_uidx
   on public.artifact_gateway_jobs
-    ((metadata ->> 'agent_request_id'))
+    (user_id, (metadata ->> 'agent_request_id'))
   where metadata ? 'agent_request_id';
 
 drop trigger if exists
