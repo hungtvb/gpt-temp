@@ -368,17 +368,31 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const action = typeof body.action === "string" ? body.action : "create";
     const { admin, key, row } = await authenticateAgent(req);
-    const session = await ensureAgentSession(admin, key, row);
+    let userId = row.user_id;
+    let accessToken: string | null = null;
+
+    if (action === "setup" || action === "create") {
+      const session = await ensureAgentSession(admin, key, row);
+      userId = session.userId;
+      accessToken = session.accessToken;
+    } else if (!userId) {
+      return json(409, {
+        error: "Agent is not initialized; call setup first",
+      });
+    }
 
     if (action === "setup") {
       return json(200, {
         ok: true,
         agent: row.name,
-        userId: session.userId,
+        userId,
       });
     }
 
     if (action === "create") {
+      if (!accessToken || !userId) {
+        throw new Error("Agent session was not initialized");
+      }
       if (!validUuid(body.requestId)) {
         return json(400, { error: "Valid requestId is required" });
       }
@@ -406,7 +420,7 @@ Deno.serve(async (req: Request) => {
         .select(
           "id,status,source_url,requested_filename,max_bytes,created_at,expires_at",
         )
-        .eq("user_id", session.userId)
+        .eq("user_id", userId)
         .eq("metadata->>agent_request_id", body.requestId)
         .maybeSingle();
       if (existingError) throw existingError;
@@ -427,13 +441,13 @@ Deno.serve(async (req: Request) => {
         crypto.getRandomValues(new Uint8Array(32)),
       );
       const callbackTokenHash = await sha256(callbackToken);
-      const storagePath = `${session.userId}/${jobId}/${filename}`;
+      const storagePath = `${userId}/${jobId}/${filename}`;
 
       const { error: insertError } = await admin
         .from("artifact_gateway_jobs")
         .insert({
           id: jobId,
-          user_id: session.userId,
+          user_id: userId,
           source_url: source.toString(),
           source_host: source.hostname,
           requested_filename: filename,
@@ -456,7 +470,7 @@ Deno.serve(async (req: Request) => {
           .select(
             "id,status,source_url,requested_filename,max_bytes,created_at,expires_at",
           )
-          .eq("user_id", session.userId)
+          .eq("user_id", userId)
           .eq("metadata->>agent_request_id", body.requestId)
           .maybeSingle();
         if (raced) return json(200, { job: raced, idempotent: true });
@@ -475,9 +489,9 @@ Deno.serve(async (req: Request) => {
       EdgeRuntime.waitUntil(
         triggerWorker({
           admin,
-          accessToken: session.accessToken,
+          accessToken,
           jobId,
-          userId: session.userId,
+          userId,
           sourceUrl: source.toString(),
           expectedSha256,
           maxBytes,
@@ -502,7 +516,7 @@ Deno.serve(async (req: Request) => {
       if (!validUuid(body.jobId)) {
         return json(400, { error: "Valid jobId is required" });
       }
-      const job = await findAgentJob(admin, session.userId, body.jobId);
+      const job = await findAgentJob(admin, userId, body.jobId);
       if (!job) return json(404, { error: "Job not found" });
       return json(200, { job });
     }
@@ -513,7 +527,7 @@ Deno.serve(async (req: Request) => {
           error: "Valid jobId and requestId are required",
         });
       }
-      const job = await findAgentJob(admin, session.userId, body.jobId);
+      const job = await findAgentJob(admin, userId, body.jobId);
       if (!job) return json(404, { error: "Job not found" });
       if (job.status !== "completed") {
         return json(409, {
@@ -637,7 +651,7 @@ Deno.serve(async (req: Request) => {
 
       const job = await findAgentJob(
         admin,
-        session.userId,
+        userId,
         transfer.job_id,
       );
       if (!job || job.status !== "completed") {
@@ -695,7 +709,7 @@ Deno.serve(async (req: Request) => {
       if (!validUuid(body.jobId)) {
         return json(400, { error: "Valid jobId is required" });
       }
-      const job = await findAgentJob(admin, session.userId, body.jobId);
+      const job = await findAgentJob(admin, userId, body.jobId);
       if (!job) return json(200, { ok: true, removed: false });
 
       await admin.storage.from(BUCKET).remove([job.storage_path]);
@@ -703,7 +717,7 @@ Deno.serve(async (req: Request) => {
         .from("artifact_gateway_jobs")
         .delete()
         .eq("id", job.id)
-        .eq("user_id", session.userId);
+        .eq("user_id", userId);
       if (deleteError) throw deleteError;
       return json(200, { ok: true, removed: true });
     }
