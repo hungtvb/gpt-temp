@@ -19,6 +19,10 @@ create index if not exists
   artifact_gateway_download_tokens_expiry_idx
   on public.artifact_gateway_download_tokens (expires_at);
 
+create index if not exists
+  artifact_gateway_download_tokens_user_idx
+  on public.artifact_gateway_download_tokens (user_id);
+
 alter table public.artifact_gateway_download_tokens
   enable row level security;
 revoke all on table public.artifact_gateway_download_tokens
@@ -34,6 +38,10 @@ create table if not exists public.artifact_gateway_agent_keys (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create index if not exists artifact_gateway_agent_keys_user_idx
+  on public.artifact_gateway_agent_keys (user_id)
+  where user_id is not null;
 
 alter table public.artifact_gateway_agent_keys
   enable row level security;
