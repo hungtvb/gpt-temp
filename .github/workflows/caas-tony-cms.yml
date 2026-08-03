@@ -1,0 +1,81 @@
+name: Tony CMS verify
+
+on:
+  pull_request:
+    paths:
+      - "tony-cms-source.b64.part-*"
+      - "tony-cms-source.tar.gz.sha256"
+      - ".github/workflows/caas-tony-cms.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tony-cms-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Reassemble and verify source
+        run: |
+          cat tony-cms-source.b64.part-* | base64 --decode > tony-cms-source.tar.gz
+          sha256sum --check tony-cms-source.tar.gz.sha256
+          mkdir tony-cms
+          tar -xzf tony-cms-source.tar.gz -C tony-cms
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Resolve locked dependencies
+        working-directory: tony-cms
+        run: npm install --ignore-scripts --package-lock-only
+
+      - name: Install dependencies
+        working-directory: tony-cms
+        run: npm ci --ignore-scripts
+
+      - name: Lint
+        working-directory: tony-cms
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: tony-cms
+        run: npm run test
+
+      - name: Production build
+        working-directory: tony-cms
+        run: npm run build
+
+      - name: Generate verified manifest
+        working-directory: tony-cms
+        run: npm run job-report
+
+      - name: Package source artifact
+        run: |
+          cd tony-cms
+          zip -qr ../tony-cms.zip . -x "node_modules/*" ".next/*" "coverage/*" "tony-cms.zip"
+          cd ..
+          sha256sum tony-cms.zip | tee tony-cms.zip.sha256
+
+      - name: Upload source and verification report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tony-cms-source
+          path: |
+            tony-cms.zip
+            tony-cms.zip.sha256
+            tony-cms/job-report.json
+            tony-cms/package-lock.json
+          if-no-files-found: error
+          retention-days: 7
