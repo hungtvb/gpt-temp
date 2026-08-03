@@ -95,14 +95,18 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Enforce production dependency policy
+      - name: Enforce dependency policy
         working-directory: tony-cms
         run: |
           node - <<'NODE'
           const fs = require('fs');
-          const report = JSON.parse(fs.readFileSync('npm-audit-production.json', 'utf8'));
-          const counts = report.metadata?.vulnerabilities ?? {};
-          const blocking = (counts.high ?? 0) + (counts.critical ?? 0);
-          console.log('Production dependency vulnerabilities:', counts);
-          if (blocking > 0) process.exit(1);
+          let failed = false;
+          for (const name of ['npm-audit-production.json', 'npm-audit-full.json']) {
+            const report = JSON.parse(fs.readFileSync(name, 'utf8'));
+            const counts = report.metadata?.vulnerabilities ?? {};
+            const blocking = (counts.high ?? 0) + (counts.critical ?? 0);
+            console.log(name, counts);
+            if (blocking > 0) failed = true;
+          }
+          if (failed) process.exit(1);
           NODE
