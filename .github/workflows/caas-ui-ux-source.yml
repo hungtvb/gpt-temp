@@ -1,0 +1,69 @@
+name: CAAS UI UX Source
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/caas-ui-ux-source.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trigger repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned upstream
+        uses: actions/checkout@v4
+        with:
+          repository: nextlevelbuilder/ui-ux-pro-max-skill
+          ref: 14ddef5c05e52d7c253b8f0129de7bcd1045ae5b
+          path: upstream
+          persist-credentials: false
+
+      - name: Build direct-readable skill folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/export"
+          SKILL="$OUT/payload/ui-ux-pro-max"
+          mkdir -p "$SKILL/data" "$SKILL/scripts" "$SKILL/references"
+          cp upstream/.claude/skills/ui-ux-pro-max/SKILL.md "$SKILL/SKILL.md"
+          cp -R upstream/.claude/skills/ui-ux-pro-max/references/. "$SKILL/references/"
+          cp -R upstream/src/ui-ux-pro-max/data/. "$SKILL/data/"
+          cp -R upstream/src/ui-ux-pro-max/scripts/. "$SKILL/scripts/"
+          cat > "$SKILL/UPSTREAM.md" <<'EOF'
+          # Upstream provenance
+
+          Repository: nextlevelbuilder/ui-ux-pro-max-skill
+          Commit: 14ddef5c05e52d7c253b8f0129de7bcd1045ae5b
+          Exported subtree: generated ChatGPT-readable skill package
+          EOF
+          cat > "$OUT/job-report.json" <<'EOF'
+          {
+            "job": "ui-ux-pro-max-direct-source",
+            "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+            "resolved_commit": "14ddef5c05e52d7c253b8f0129de7bcd1045ae5b"
+          }
+          EOF
+          cd "$OUT"
+          find payload -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          test -s payload/ui-ux-pro-max/SKILL.md
+          test -s payload/ui-ux-pro-max/scripts/search.py
+          test -s payload/ui-ux-pro-max/scripts/core.py
+          python payload/ui-ux-pro-max/scripts/search.py "analytics dashboard" --domain product -n 1 > smoke.txt
+          test -s smoke.txt
+
+      - name: Upload source folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-ux-pro-max-direct-source
+          path: ${{ runner.temp }}/export
+          retention-days: 1
+          if-no-files-found: error
