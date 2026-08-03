@@ -29,6 +29,7 @@ jobs:
         run: |
           cat tony-cms-source.b64.part-* | base64 --decode > tony-cms-source.tar.gz
           sha256sum --check tony-cms-source.tar.gz.sha256
+          rm -rf tony-cms
           mkdir tony-cms
           tar -xzf tony-cms-source.tar.gz -C tony-cms
 
