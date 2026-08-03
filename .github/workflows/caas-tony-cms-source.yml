@@ -1,0 +1,79 @@
+name: Tony CMS source verify
+
+on:
+  pull_request:
+    paths:
+      - "tony-cms/**"
+      - ".github/workflows/caas-tony-cms-source.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tony-cms-source-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: tony-cms
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Resolve dependency lock
+        run: npm install --ignore-scripts --package-lock-only
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Dependency audit
+        run: |
+          npm audit --json > npm-audit-full.json || true
+          npm audit --omit=dev --json > npm-audit-production.json || true
+          node - <<'NODE'
+          const fs = require('fs');
+          let failed = false;
+          for (const name of ['npm-audit-production.json', 'npm-audit-full.json']) {
+            const report = JSON.parse(fs.readFileSync(name, 'utf8'));
+            const counts = report.metadata?.vulnerabilities ?? {};
+            console.log(name, counts);
+            if ((counts.high ?? 0) + (counts.critical ?? 0) > 0) failed = true;
+          }
+          if (failed) process.exit(1);
+          NODE
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Generate source manifest
+        run: npm run job-report
+
+      - name: Upload verification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tony-cms-readable-source-evidence
+          path: |
+            tony-cms/package-lock.json
+            tony-cms/job-report.json
+            tony-cms/npm-audit-full.json
+            tony-cms/npm-audit-production.json
+          if-no-files-found: error
+          retention-days: 7
