@@ -15,14 +15,14 @@ Developer-first headless CMS MVP built with Next.js App Router, TypeScript and e
 - Supabase/PostgreSQL migration
 - Unit tests for schema, RBAC, lifecycle and delivery filtering
 
-## Run locally
+## Run locally from this branch
 
 ```bash
-npm ci
+npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/admin`. The demo does not require environment variables.
+Open `http://localhost:3000/admin`. The demo does not require environment variables. The checksummed release ZIP produced by CI includes the verified `package-lock.json` and supports `npm ci`.
 
 ## Verify
 
