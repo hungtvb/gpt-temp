@@ -61,10 +61,14 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/tony-router-deps"
-          mkdir -p "$out"
+          mkdir -p "$out" target/.caas-tools
           archive="$out/tony-router-deps-${TARGET_SHA}.tar.gz"
 
-          paths=(node_modules)
+          pnpm_entry=$(readlink -f "$(command -v pnpm)")
+          pnpm_package=$(dirname "$(dirname "$pnpm_entry")")
+          cp -a "$pnpm_package" target/.caas-tools/pnpm
+
+          paths=(node_modules .caas-tools/pnpm)
           while IFS= read -r directory; do
             paths+=("${directory#target/}")
           done < <(find target/apps target/packages -type d -name node_modules -prune | sort)
@@ -76,11 +80,11 @@ jobs:
             exit 1
           fi
 
-          sha256sum "$archive" > "$out/SHA256SUMS"
+          archive_name=$(basename "$archive")
+          (cd "$out" && sha256sum "$archive_name" > SHA256SUMS)
           lock_sha=$(sha256sum target/pnpm-lock.yaml | awk '{print $1}')
           node_version=$(node --version)
           pnpm_version=$(pnpm --version)
-          archive_name=$(basename "$archive")
           archive_sha=$(awk '{print $1}' "$out/SHA256SUMS")
 
           cat > "$out/job-report.json" <<JSON
