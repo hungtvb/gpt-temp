@@ -1,0 +1,109 @@
+name: CAAS Tony Router Dependencies
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/caas-tony-router-deps.yml'
+
+permissions:
+  contents: read
+
+env:
+  TARGET_REPOSITORY: hungtvb/tony-rounter
+  TARGET_SHA: ac0e63e84fa4021647fa9747028e026899058695
+  PNPM_VERSION: 10.14.0
+  NODE_VERSION: '22'
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout bridge repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact Tony Router source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPOSITORY }}
+          ref: ${{ env.TARGET_SHA }}
+          path: target
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: target/pnpm-lock.yaml
+
+      - name: Install and verify exact source
+        working-directory: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          pnpm install --frozen-lockfile
+          pnpm verify
+
+      - name: Package dependency tree
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/tony-router-deps"
+          mkdir -p "$out"
+          archive="$out/tony-router-deps-${TARGET_SHA}.tar.gz"
+
+          paths=(node_modules)
+          while IFS= read -r directory; do
+            paths+=("${directory#target/}")
+          done < <(find target/apps target/packages -type d -name node_modules -prune | sort)
+
+          tar -C target -czf "$archive" "${paths[@]}"
+          size=$(stat -c '%s' "$archive")
+          if [ "$size" -gt 52428800 ]; then
+            echo "Dependency artifact exceeds 50 MiB: $size bytes" >&2
+            exit 1
+          fi
+
+          sha256sum "$archive" > "$out/SHA256SUMS"
+          lock_sha=$(sha256sum target/pnpm-lock.yaml | awk '{print $1}')
+          node_version=$(node --version)
+          pnpm_version=$(pnpm --version)
+          archive_name=$(basename "$archive")
+          archive_sha=$(awk '{print $1}' "$out/SHA256SUMS")
+
+          cat > "$out/job-report.json" <<JSON
+          {
+            "job": "tony-router-dependency-bootstrap",
+            "repository": "$TARGET_REPOSITORY",
+            "source_sha": "$TARGET_SHA",
+            "lockfile_sha256": "$lock_sha",
+            "node_version": "$node_version",
+            "pnpm_version": "$pnpm_version",
+            "archive": "$archive_name",
+            "size_bytes": $size,
+            "sha256": "$archive_sha",
+            "verification": "pnpm verify passed"
+          }
+          JSON
+
+          echo "directory=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Upload dependency artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-router-deps-ac0e63e8
+          path: ${{ steps.package.outputs.directory }}
+          if-no-files-found: error
+          retention-days: 1
