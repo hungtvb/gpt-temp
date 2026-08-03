@@ -45,6 +45,19 @@ jobs:
         working-directory: tony-cms
         run: npm ci --ignore-scripts
 
+      - name: Capture dependency audits
+        working-directory: tony-cms
+        run: |
+          npm audit --json > npm-audit-full.json || true
+          npm audit --omit=dev --json > npm-audit-production.json || true
+          node - <<'NODE'
+          const fs = require('fs');
+          for (const name of ['npm-audit-full.json', 'npm-audit-production.json']) {
+            const report = JSON.parse(fs.readFileSync(name, 'utf8'));
+            console.log(name, report.metadata?.vulnerabilities ?? {});
+          }
+          NODE
+
       - name: Lint
         working-directory: tony-cms
         run: npm run lint
@@ -77,5 +90,19 @@ jobs:
             tony-cms.zip.sha256
             tony-cms/job-report.json
             tony-cms/package-lock.json
+            tony-cms/npm-audit-full.json
+            tony-cms/npm-audit-production.json
           if-no-files-found: error
           retention-days: 7
+
+      - name: Enforce production dependency policy
+        working-directory: tony-cms
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('npm-audit-production.json', 'utf8'));
+          const counts = report.metadata?.vulnerabilities ?? {};
+          const blocking = (counts.high ?? 0) + (counts.critical ?? 0);
+          console.log('Production dependency vulnerabilities:', counts);
+          if (blocking > 0) process.exit(1);
+          NODE
