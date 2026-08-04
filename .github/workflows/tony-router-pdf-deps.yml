@@ -1,0 +1,68 @@
+name: Tony Router PDF Dependencies
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/tony-router-pdf-deps.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SOURCE_REPOSITORY: hungtvb/tony-rounter
+      SOURCE_COMMIT: e9a45fbb518c83b22adf90b13dda1b883aeaaa12
+    steps:
+      - name: Checkout automation repository
+        uses: actions/checkout@v4
+
+      - name: Checkout exact Tony Router source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_COMMIT }}
+          path: tony-router
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tony-router/pnpm-lock.yaml
+
+      - name: Install exact dependencies
+        working-directory: tony-router
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          pnpm install --frozen-lockfile
+          mkdir -p "$RUNNER_TEMP/package/pnpm-home"
+          cp -a "$PNPM_HOME"/. "$RUNNER_TEMP/package/pnpm-home/"
+          tar -czf "$RUNNER_TEMP/package/tony-router-deps-${SOURCE_COMMIT:0:8}.tar.gz" \
+            node_modules \
+            apps/gateway/node_modules \
+            packages/core/node_modules
+          sha256sum "$RUNNER_TEMP/package/tony-router-deps-${SOURCE_COMMIT:0:8}.tar.gz" > "$RUNNER_TEMP/package/SHA256SUMS"
+          sha256sum pnpm-lock.yaml > "$RUNNER_TEMP/package/LOCKFILE_SHA256"
+          printf '{"repository":"%s","commit":"%s","node":"%s","pnpm":"%s"}\n' \
+            "$SOURCE_REPOSITORY" "$SOURCE_COMMIT" "$(node --version)" "$(pnpm --version)" \
+            > "$RUNNER_TEMP/package/job-report.json"
+
+      - name: Upload dependency artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-router-deps-e9a45fbb
+          path: ${{ runner.temp }}/package
+          if-no-files-found: error
+          retention-days: 1
