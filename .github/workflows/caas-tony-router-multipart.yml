@@ -1,0 +1,57 @@
+name: CAAS Tony Router Multipart Lockfile
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/caas-tony-router-multipart.yml
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout disposable bridge
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Generate exact dependency files
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/tony-rounter"
+          git clone --filter=blob:none https://github.com/hungtvb/tony-rounter.git "$WORK"
+          git -C "$WORK" checkout --detach 416fce7ebbf89b6fdc8e07f6d8617147f99af5c2
+          corepack enable
+          cd "$WORK"
+          pnpm add @fastify/multipart@10.1.0 --filter @tony-router/gateway
+          mkdir -p "$RUNNER_TEMP/artifact/payload/apps/gateway"
+          cp package.json pnpm-lock.yaml "$RUNNER_TEMP/artifact/payload/"
+          cp apps/gateway/package.json "$RUNNER_TEMP/artifact/payload/apps/gateway/package.json"
+          cat > "$RUNNER_TEMP/artifact/job-report.json" <<'JSON'
+          {
+            "job": "tony-router-multipart-lockfile",
+            "source_repository": "hungtvb/tony-rounter",
+            "source_commit": "416fce7ebbf89b6fdc8e07f6d8617147f99af5c2",
+            "dependency": "@fastify/multipart@10.1.0",
+            "payload_files": 3
+          }
+          JSON
+          cd "$RUNNER_TEMP/artifact"
+          find payload -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          zip -qr "$RUNNER_TEMP/tony-router-multipart-lockfile.zip" .
+          sha256sum "$RUNNER_TEMP/tony-router-multipart-lockfile.zip" > "$RUNNER_TEMP/tony-router-multipart-lockfile.zip.sha256"
+
+      - name: Upload verified payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-router-multipart-lockfile
+          path: |
+            ${{ runner.temp }}/tony-router-multipart-lockfile.zip
+            ${{ runner.temp }}/tony-router-multipart-lockfile.zip.sha256
+          retention-days: 1
+          if-no-files-found: error
