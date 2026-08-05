@@ -82,7 +82,7 @@ jobs:
           done
           test "$ready" = true
 
-          curl --fail --silent --show-error http://127.0.0.1:8787/ > evidence/payload/ui.html
+          curl --fail --location --silent --show-error http://127.0.0.1:8787/ > evidence/payload/ui.html
 
           unauthorized_status="$(curl --silent --output evidence/payload/models-unauthorized.json --write-out '%{http_code}' http://127.0.0.1:8787/v1/models)"
           printf '%s\n' "$unauthorized_status" > evidence/payload/models-unauthorized.status
@@ -120,7 +120,7 @@ jobs:
             "runtime_checks": [
               "gateway process started",
               "GET /health returned service status ok",
-              "GET / returned Tony Router dashboard HTML",
+              "GET / followed its redirect and returned Tony Router dashboard HTML",
               "GET /v1/models rejected missing bearer token with 401",
               "authenticated GET /v1/models returned a valid list payload"
             ]
