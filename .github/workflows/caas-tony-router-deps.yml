@@ -1,0 +1,68 @@
+name: CAAS Tony Router dependency artifact
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/caas-tony-router-deps.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out exact Tony Router revision
+        uses: actions/checkout@v4
+        with:
+          repository: hungtvb/tony-rounter
+          ref: 3143c67edec33485c8e93f46ba1dc30195876ffe
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install exact pnpm and locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/pnpm-runtime" pnpm@10.14.0
+          PNPM="$RUNNER_TEMP/pnpm-runtime/node_modules/.bin/pnpm"
+          "$PNPM" --version
+          "$PNPM" install --frozen-lockfile
+
+      - name: Package checksummed dependency artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/tony-router-deps-3143c67.tar.gz"
+          tar -czf "$archive" \
+            -C "$GITHUB_WORKSPACE" node_modules apps/gateway/node_modules packages/core/node_modules \
+            -C "$RUNNER_TEMP" pnpm-runtime
+          (cd "$RUNNER_TEMP" && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
+          cat > "$RUNNER_TEMP/job-report.json" <<'JSON'
+          {
+            "job": "tony-router-dependency-bootstrap",
+            "source_repository": "hungtvb/tony-rounter",
+            "source_sha": "3143c67edec33485c8e93f46ba1dc30195876ffe",
+            "package_manager": "pnpm@10.14.0",
+            "install": "pnpm install --frozen-lockfile"
+          }
+          JSON
+
+      - name: Upload dependency artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-router-deps-3143c67
+          path: |
+            ${{ runner.temp }}/tony-router-deps-3143c67.tar.gz
+            ${{ runner.temp }}/tony-router-deps-3143c67.tar.gz.sha256
+            ${{ runner.temp }}/job-report.json
+          if-no-files-found: error
+          retention-days: 1
