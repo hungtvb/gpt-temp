@@ -1,0 +1,138 @@
+name: CAAS Tony Router runtime verification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/caas-tony-router-runtime.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out exact Tony Router revision
+        uses: actions/checkout@v4
+        with:
+          repository: hungtvb/tony-rounter
+          ref: 3143c67edec33485c8e93f46ba1dc30195876ffe
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.14.0 --activate
+          pnpm --version
+
+      - name: Install locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/payload
+          pnpm install --frozen-lockfile 2>&1 | tee evidence/payload/install.log
+
+      - name: Run repository verification gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm verify 2>&1 | tee evidence/payload/verify.log
+
+      - name: Start gateway and run smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/payload
+          git rev-parse HEAD | tee evidence/payload/source-sha.txt
+          git rev-parse HEAD^{tree} | tee evidence/payload/source-tree.txt
+          node --version | tee evidence/payload/node-version.txt
+          pnpm --version | tee evidence/payload/pnpm-version.txt
+
+          export HOME="$RUNNER_TEMP/tony-router-home"
+          export TONY_ROUTER_TOKEN='tony-router-runtime-smoke-token-20260805'
+          export TONY_ROUTER_FILE_ID_KEY='tony-router-runtime-smoke-file-key-20260805'
+          mkdir -p "$HOME"
+
+          pnpm --filter @tony-router/gateway start > evidence/payload/gateway.log 2>&1 &
+          gateway_pid=$!
+          cleanup() {
+            kill "$gateway_pid" 2>/dev/null || true
+            wait "$gateway_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:8787/health > evidence/payload/health.json; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = true
+
+          curl --fail --silent --show-error http://127.0.0.1:8787/ > evidence/payload/ui.html
+
+          unauthorized_status="$(curl --silent --output evidence/payload/models-unauthorized.json --write-out '%{http_code}' http://127.0.0.1:8787/v1/models)"
+          printf '%s\n' "$unauthorized_status" > evidence/payload/models-unauthorized.status
+          test "$unauthorized_status" = '401'
+
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $TONY_ROUTER_TOKEN" \
+            http://127.0.0.1:8787/v1/models > evidence/payload/models-authorized.json
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const health = JSON.parse(fs.readFileSync('evidence/payload/health.json', 'utf8'));
+          if (health.status !== 'ok' || health.service !== 'tony-router') {
+            throw new Error(`Unexpected health payload: ${JSON.stringify(health)}`);
+          }
+          const models = JSON.parse(fs.readFileSync('evidence/payload/models-authorized.json', 'utf8'));
+          if (models.object !== 'list' || !Array.isArray(models.data)) {
+            throw new Error(`Unexpected models payload: ${JSON.stringify(models)}`);
+          }
+          const ui = fs.readFileSync('evidence/payload/ui.html', 'utf8');
+          if (!ui.includes('Tony Router') || !ui.includes('<html')) {
+            throw new Error('Dashboard HTML did not contain the expected Tony Router document');
+          }
+          NODE
+
+          cleanup
+          trap - EXIT
+
+          cat > evidence/job-report.json <<'JSON'
+          {
+            "job": "tony-router-runtime-verification",
+            "source_repository": "hungtvb/tony-rounter",
+            "requested_ref": "3143c67edec33485c8e93f46ba1dc30195876ffe",
+            "verification_gate": "pnpm verify",
+            "runtime_checks": [
+              "gateway process started",
+              "GET /health returned service status ok",
+              "GET / returned Tony Router dashboard HTML",
+              "GET /v1/models rejected missing bearer token with 401",
+              "authenticated GET /v1/models returned a valid list payload"
+            ]
+          }
+          JSON
+          (cd evidence && sha256sum payload/* > SHA256SUMS)
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-router-runtime-evidence-3143c67
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 1
