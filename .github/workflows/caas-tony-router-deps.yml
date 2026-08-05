@@ -1,0 +1,61 @@
+name: CAAS Tony Router Dependencies
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/caas-tony-router-deps.yml
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout disposable bridge
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install and package exact dependency tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/tony-rounter"
+          ARTIFACT="$RUNNER_TEMP/artifact"
+          git clone --filter=blob:none https://github.com/hungtvb/tony-rounter.git "$WORK"
+          git -C "$WORK" checkout --detach 416fce7ebbf89b6fdc8e07f6d8617147f99af5c2
+          corepack enable
+          cd "$WORK"
+          pnpm add @fastify/multipart@10.1.0 --filter @tony-router/gateway
+          pnpm install --frozen-lockfile
+          mkdir -p "$ARTIFACT/payload"
+          cp package.json pnpm-lock.yaml "$ARTIFACT/payload/"
+          mkdir -p "$ARTIFACT/payload/apps/gateway"
+          cp apps/gateway/package.json "$ARTIFACT/payload/apps/gateway/package.json"
+          find . -type d -name node_modules -prune -print0 \
+            | tar --null -T - --zstd -cf "$ARTIFACT/payload/node-modules.tar.zst"
+          cat > "$ARTIFACT/job-report.json" <<'JSON'
+          {
+            "job": "tony-router-dependencies",
+            "source_repository": "hungtvb/tony-rounter",
+            "source_commit": "416fce7ebbf89b6fdc8e07f6d8617147f99af5c2",
+            "dependency": "@fastify/multipart@10.1.0"
+          }
+          JSON
+          cd "$ARTIFACT"
+          find payload -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          zip -qr "$RUNNER_TEMP/tony-router-dependencies.zip" .
+          sha256sum "$RUNNER_TEMP/tony-router-dependencies.zip" > "$RUNNER_TEMP/tony-router-dependencies.zip.sha256"
+
+      - name: Upload verified dependency payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-router-dependencies
+          path: |
+            ${{ runner.temp }}/tony-router-dependencies.zip
+            ${{ runner.temp }}/tony-router-dependencies.zip.sha256
+          retention-days: 1
+          if-no-files-found: error
