@@ -5,6 +5,7 @@ on:
     branches: [feat/keycloak-liferay-saml]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,3 +22,4 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: gradle --version
       - run: gradle :modules:keycloak-saml:build --no-daemon --stacktrace
+      - run: gradle :modules:keycloak-oidc:build --no-daemon --stacktrace
