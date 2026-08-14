@@ -217,9 +217,12 @@ Example:
 ```gradle
 dependencies {
     compileOnly group: "com.liferay.portal", name: "release.portal.api"
+    compileOnly group: "com.liferay", name: "com.liferay.saml.api"
     compileOnly group: "com.liferay", name: "com.liferay.saml.persistence.api"
 }
 ```
+
+`com.liferay.saml.api` is required because the lifecycle implementation imports `WebSsoProfile`; `com.liferay.saml.persistence.api` is required for `SamlSpSession` and `SamlSpSessionLocalService`.
 
 Do not hard-code an API version copied from Liferay master into a production workspace unless it matches the target distribution.
 
