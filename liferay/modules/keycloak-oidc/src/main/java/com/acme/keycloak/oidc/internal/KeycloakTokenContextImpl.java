@@ -40,10 +40,20 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
             return Optional.empty();
         }
 
+        final long openIdConnectSessionPrimaryKey;
+
+        try {
+            openIdConnectSessionPrimaryKey = Long.parseLong(
+                openIdConnectSessionId);
+        }
+        catch (NumberFormatException numberFormatException) {
+            return Optional.empty();
+        }
+
         try {
             OpenIdConnectSession session =
                 _openIdConnectSessionLocalService.getOpenIdConnectSession(
-                    openIdConnectSessionId);
+                    openIdConnectSessionPrimaryKey);
 
             if (session.getUserId() != PortalUtil.getUserId(request)) {
                 return Optional.empty();
