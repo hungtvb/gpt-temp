@@ -57,7 +57,7 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
             return Optional.empty();
         }
 
-        String accessToken = session.getAccessTokenValue();
+        String accessToken = session.getAccessToken();
 
         if (accessToken == null || accessToken.isBlank()) {
             return Optional.empty();
