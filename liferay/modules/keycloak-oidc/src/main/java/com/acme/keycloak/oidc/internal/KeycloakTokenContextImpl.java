@@ -17,6 +17,7 @@ import java.util.Optional;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
+@SuppressWarnings("deprecation")
 @Component(service = KeycloakTokenContextService.class)
 public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
 
@@ -24,7 +25,13 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
     public Optional<KeycloakTokenContext> getCurrent(
         HttpServletRequest request) {
 
-        if (request == null || PortalUtil.getUserId(request) <= 0) {
+        if (request == null) {
+            return Optional.empty();
+        }
+
+        long currentUserId = PortalUtil.getUserId(request);
+
+        if (currentUserId <= 0) {
             return Optional.empty();
         }
 
@@ -34,31 +41,28 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
             return Optional.empty();
         }
 
-        Object sessionIdAttribute = httpSession.getAttribute(
-            OpenIdConnectWebKeys.OPEN_ID_CONNECT_SESSION_ID);
+        com.liferay.portal.security.sso.openid.connect.OpenIdConnectSession webSession =
+            (com.liferay.portal.security.sso.openid.connect.OpenIdConnectSession)
+                httpSession.getAttribute(
+                    OpenIdConnectWebKeys.OPEN_ID_CONNECT_SESSION);
 
-        if (!(sessionIdAttribute instanceof Long)) {
+        if (webSession == null ||
+            webSession.getLoginUserId() != currentUserId) {
+
             return Optional.empty();
         }
 
-        Long openIdConnectSessionId = (Long)sessionIdAttribute;
+        String accessToken = webSession.getAccessTokenValue();
 
-        try {
-            OpenIdConnectSession session =
-                _openIdConnectSessionLocalService.getOpenIdConnectSession(
-                    openIdConnectSessionId.longValue());
-
-            long currentUserId = PortalUtil.getUserId(request);
-
-            if (session.getUserId() != currentUserId) {
-                return Optional.empty();
-            }
-
-            return Optional.of(toContext(session));
-        }
-        catch (PortalException portalException) {
+        if (accessToken == null || accessToken.isBlank()) {
             return Optional.empty();
         }
+
+        OpenIdConnectSession sessionModel = _fetchSessionModel(
+            httpSession, currentUserId);
+
+        return Optional.of(
+            _toContext(webSession, sessionModel, accessToken));
     }
 
     @Override
@@ -72,45 +76,90 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
         ).orElse(false);
     }
 
-    private static KeycloakTokenContext toContext(
-        OpenIdConnectSession session) {
+    private OpenIdConnectSession _fetchSessionModel(
+        HttpSession httpSession, long currentUserId) {
+
+        Object sessionIdAttribute = httpSession.getAttribute(
+            OpenIdConnectWebKeys.OPEN_ID_CONNECT_SESSION_ID);
+
+        if (!(sessionIdAttribute instanceof Long)) {
+            return null;
+        }
+
+        try {
+            OpenIdConnectSession session =
+                _openIdConnectSessionLocalService.getOpenIdConnectSession(
+                    ((Long)sessionIdAttribute).longValue());
+
+            if (session.getUserId() != currentUserId) {
+                return null;
+            }
+
+            return session;
+        }
+        catch (PortalException portalException) {
+            return null;
+        }
+    }
+
+    private KeycloakTokenContext _toContext(
+        com.liferay.portal.security.sso.openid.connect.OpenIdConnectSession webSession,
+        OpenIdConnectSession sessionModel, String accessToken) {
 
         return new KeycloakTokenContext() {
 
             @Override
             public String getAuthServerWellKnownURI() {
-                return session.getAuthServerWellKnownURI();
+                if (sessionModel != null) {
+                    return sessionModel.getAuthServerWellKnownURI();
+                }
+
+                return webSession.getOpenIdProviderName();
             }
 
             @Override
             public String getClientId() {
-                return session.getClientId();
+                if (sessionModel != null) {
+                    return sessionModel.getClientId();
+                }
+
+                return null;
             }
 
             @Override
             public String getIssuer() {
-                return session.getIssuer();
+                if (sessionModel != null) {
+                    return sessionModel.getIssuer();
+                }
+
+                return webSession.getOpenIdProviderName();
             }
 
             @Override
             public String getSessionId() {
-                return session.getSessionId();
+                if (sessionModel != null) {
+                    return sessionModel.getSessionId();
+                }
+
+                return null;
             }
 
             @Override
             public long getUserId() {
-                return session.getUserId();
+                return webSession.getLoginUserId();
             }
 
             @Override
             public Date getAccessTokenExpirationDate() {
-                return session.getAccessTokenExpirationDate();
+                if (sessionModel != null) {
+                    return sessionModel.getAccessTokenExpirationDate();
+                }
+
+                return null;
             }
 
             @Override
             public boolean hasAccessToken() {
-                String accessToken = session.getAccessToken();
-
                 return accessToken != null && !accessToken.isBlank();
             }
 
