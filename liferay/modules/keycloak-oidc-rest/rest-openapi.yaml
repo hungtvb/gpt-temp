@@ -2,9 +2,10 @@ components:
     schemas:
         AccessToken:
             additionalProperties: true
-            description: "Raw OAuth 2.0 token response stored by Liferay as a JSON string."
+            description: "OAuth 2.0 token response stored by Liferay as a JSON string."
             type: object
         TokenContext:
+            description: "Current Liferay user's OIDC token context."
             properties:
                 accessToken:
                     $ref: "#/components/schemas/AccessToken"
@@ -41,6 +42,10 @@ components:
                     format: int64
                     readOnly: true
                     type: integer
+            required:
+                - authenticated
+                - hasAccessToken
+                - keycloak
             type: object
 info:
     description: "Local proof-of-concept API for inspecting the current Liferay OIDC/Keycloak token context."
