@@ -11,6 +11,8 @@ import com.liferay.portal.security.sso.openid.connect.persistence.service.OpenId
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Date;
 import java.util.Optional;
 
@@ -132,6 +134,28 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
             }
 
             @Override
+            public String getAccessToken() {
+                return accessToken;
+            }
+
+            @Override
+            public String getAccessTokenHeader() {
+                return _jwtPart(accessToken, 0);
+            }
+
+            @Override
+            public String getAccessTokenPayload() {
+                return _jwtPart(accessToken, 1);
+            }
+
+            @Override
+            public String getAccessTokenSignature() {
+                String[] parts = accessToken.split("\\.", -1);
+
+                return parts.length == 3 ? parts[2] : null;
+            }
+
+            @Override
             public boolean hasAccessToken() {
                 return accessToken != null && !accessToken.isBlank();
             }
@@ -153,6 +177,23 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
                 return keycloakIssuer.equals(session.getIssuer());
             }
         };
+    }
+
+    private String _jwtPart(String token, int index) {
+        String[] parts = token.split("\\.", -1);
+
+        if (parts.length != 3) {
+            return null;
+        }
+
+        try {
+            return new String(
+                Base64.getUrlDecoder().decode(parts[index]),
+                StandardCharsets.UTF_8);
+        }
+        catch (IllegalArgumentException illegalArgumentException) {
+            return null;
+        }
     }
 
     @Reference
