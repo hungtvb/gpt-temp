@@ -1,0 +1,3 @@
+Bundle-Name: Keycloak Liferay SAML Checker
+Bundle-SymbolicName: com.acme.keycloak.saml.checker
+Bundle-Version: 1.0.0
