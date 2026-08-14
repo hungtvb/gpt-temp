@@ -18,8 +18,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Diagnostic REST endpoint for verifying the current Liferay OIDC context.
- * Does not return the raw access token.
+ * Diagnostic REST endpoint for the local OIDC POC.
+ * This endpoint intentionally exposes the raw access token for local testing.
+ * Do not deploy this endpoint to a shared or production environment.
  */
 @Component(
     property = {
@@ -52,6 +53,7 @@ public class KeycloakTokenContextResource {
             body.put("issuer", context.getIssuer());
             body.put("clientId", context.getClientId());
             body.put("userId", context.getUserId());
+            body.put("accessToken", context.getAccessToken());
         }
 
         return Response.ok(body)
