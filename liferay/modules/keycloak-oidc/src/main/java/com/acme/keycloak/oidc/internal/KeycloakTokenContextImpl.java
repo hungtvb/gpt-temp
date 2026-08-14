@@ -9,6 +9,7 @@ import com.liferay.portal.security.sso.openid.connect.persistence.model.OpenIdCo
 import com.liferay.portal.security.sso.openid.connect.persistence.service.OpenIdConnectSessionLocalService;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 
 import java.util.Date;
 import java.util.Optional;
@@ -27,35 +28,29 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
             return Optional.empty();
         }
 
-        Object sessionIdAttribute = request.getAttribute(
+        HttpSession httpSession = request.getSession(false);
+
+        if (httpSession == null) {
+            return Optional.empty();
+        }
+
+        Object sessionIdAttribute = httpSession.getAttribute(
             OpenIdConnectWebKeys.OPEN_ID_CONNECT_SESSION_ID);
 
-        if (!(sessionIdAttribute instanceof String)) {
+        if (!(sessionIdAttribute instanceof Long)) {
             return Optional.empty();
         }
 
-        String openIdConnectSessionId = (String)sessionIdAttribute;
-
-        if (openIdConnectSessionId.isBlank()) {
-            return Optional.empty();
-        }
-
-        final long openIdConnectSessionPrimaryKey;
-
-        try {
-            openIdConnectSessionPrimaryKey = Long.parseLong(
-                openIdConnectSessionId);
-        }
-        catch (NumberFormatException numberFormatException) {
-            return Optional.empty();
-        }
+        Long openIdConnectSessionId = (Long)sessionIdAttribute;
 
         try {
             OpenIdConnectSession session =
                 _openIdConnectSessionLocalService.getOpenIdConnectSession(
-                    openIdConnectSessionPrimaryKey);
+                    openIdConnectSessionId.longValue());
 
-            if (session.getUserId() != PortalUtil.getUserId(request)) {
+            long currentUserId = PortalUtil.getUserId(request);
+
+            if (session.getUserId() != currentUserId) {
                 return Optional.empty();
             }
 
