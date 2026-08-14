@@ -6,6 +6,7 @@ import com.acme.keycloak.oidc.api.KeycloakTokenContextService;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -30,9 +31,9 @@ import org.osgi.service.component.annotations.Reference;
 public class KeycloakTokenContextResource {
 
     @GET
-    public Response getContext() {
+    public Response getContext(@Context HttpServletRequest request) {
         KeycloakTokenContext context =
-            _keycloakTokenContextService.getCurrent(_request).orElse(null);
+            _keycloakTokenContextService.getCurrent(request).orElse(null);
 
         if (context == null) {
             return Response.ok(
@@ -61,7 +62,4 @@ public class KeycloakTokenContextResource {
 
     @Reference
     private KeycloakTokenContextService _keycloakTokenContextService;
-
-    @Reference
-    private HttpServletRequest _request;
 }
