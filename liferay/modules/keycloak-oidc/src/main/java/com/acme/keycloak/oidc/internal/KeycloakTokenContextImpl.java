@@ -2,15 +2,15 @@ package com.acme.keycloak.oidc.internal;
 
 import com.acme.keycloak.oidc.api.KeycloakTokenContext;
 import com.acme.keycloak.oidc.api.KeycloakTokenContextService;
+import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.util.PortalUtil;
+import com.liferay.portal.security.sso.openid.connect.constants.OpenIdConnectWebKeys;
 import com.liferay.portal.security.sso.openid.connect.persistence.model.OpenIdConnectSession;
-import com.liferay.portal.security.sso.openid.connect.persistence.service.persistence.OpenIdConnectSessionPersistence;
+import com.liferay.portal.security.sso.openid.connect.persistence.service.OpenIdConnectSessionLocalService;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 
 import java.util.Date;
-import java.util.List;
 import java.util.Optional;
 
 import org.osgi.service.component.annotations.Component;
@@ -23,32 +23,37 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
     public Optional<KeycloakTokenContext> getCurrent(
         HttpServletRequest request) {
 
-        if (request == null) {
+        if (request == null || PortalUtil.getUserId(request) <= 0) {
             return Optional.empty();
         }
 
-        long userId = PortalUtil.getUserId(request);
+        Object sessionIdAttribute = request.getAttribute(
+            OpenIdConnectWebKeys.OPEN_ID_CONNECT_SESSION_ID);
 
-        if (userId <= 0) {
+        if (!(sessionIdAttribute instanceof String)) {
             return Optional.empty();
         }
 
-        HttpSession httpSession = request.getSession(false);
+        String openIdConnectSessionId = (String)sessionIdAttribute;
 
-        if (httpSession == null) {
+        if (openIdConnectSessionId.isBlank()) {
             return Optional.empty();
         }
 
-        String currentSessionId = httpSession.getId();
+        try {
+            OpenIdConnectSession session =
+                _openIdConnectSessionLocalService.getOpenIdConnectSession(
+                    openIdConnectSessionId);
 
-        List<OpenIdConnectSession> sessions =
-            _openIdConnectSessionPersistence.findByUserId(userId);
+            if (session.getUserId() != PortalUtil.getUserId(request)) {
+                return Optional.empty();
+            }
 
-        return sessions.stream().filter(
-            session -> currentSessionId.equals(session.getSessionId())
-        ).findFirst().map(
-            KeycloakTokenContextImpl::toContext
-        );
+            return Optional.of(toContext(session));
+        }
+        catch (PortalException portalException) {
+            return Optional.empty();
+        }
     }
 
     @Override
@@ -124,5 +129,5 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
     }
 
     @Reference
-    private OpenIdConnectSessionPersistence _openIdConnectSessionPersistence;
+    private OpenIdConnectSessionLocalService _openIdConnectSessionLocalService;
 }
