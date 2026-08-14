@@ -3,10 +3,8 @@ package com.acme.keycloak.oidc.rest.internal.resource.v1_0;
 import com.acme.keycloak.oidc.api.KeycloakTokenContext;
 import com.acme.keycloak.oidc.api.KeycloakTokenContextService;
 import com.acme.keycloak.oidc.rest.dto.v1_0.TokenContext;
-import com.acme.keycloak.oidc.rest.internal.resource.v1_0.BaseTokenContextResourceImpl;
 
 import com.liferay.portal.kernel.json.JSONFactoryUtil;
-import com.liferay.portal.vulcan.pagination.Pagination;
 
 import java.util.Map;
 import java.util.Optional;
@@ -18,9 +16,8 @@ import org.osgi.service.component.annotations.ServiceScope;
 /**
  * REST Builder implementation for the current Keycloak/OIDC token context.
  *
- * <p>This is intentionally a local proof-of-concept endpoint. The token
- * response is mapped into a nested object instead of exposing the raw JSON
- * string stored by Liferay.</p>
+ * <p>This is intentionally a local proof-of-concept endpoint. The OAuth token
+ * response stored by Liferay is mapped into a nested object.</p>
  */
 @Component(
     properties = "OSGI-INF/liferay/rest/v1_0/token-context.properties",
@@ -70,9 +67,9 @@ public class TokenContextResourceImpl extends BaseTokenContextResourceImpl {
 
                 tokenContext.setAccessToken(accessToken);
             }
-            catch (Exception exception) {
-                // Keep the endpoint usable even if Liferay contains malformed
-                // token JSON. The raw stored value is intentionally not returned.
+            catch (RuntimeException runtimeException) {
+                // Keep the endpoint usable if the stored token response is
+                // not valid JSON. Do not expose the malformed raw value.
             }
         }
 
