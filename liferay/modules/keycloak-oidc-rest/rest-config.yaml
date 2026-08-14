@@ -5,4 +5,8 @@ application:
     className: "KeycloakOidcApplication"
     name: "Com.Acme.Keycloak.Oidc"
 author: "hungtvb"
+clientDir: "../keycloak-oidc-rest-client/src/main/java"
+compatibilityVersion: 15
+forcePredictableOperationId: true
 javaEEPackage: "jakarta"
+testDir: "../keycloak-oidc-rest-test/src/testIntegration/java"
