@@ -1,0 +1,17 @@
+buildscript {
+    dependencies {
+        classpath group: "com.liferay", name: "com.liferay.gradle.plugins.workspace", version: "latest.release"
+    }
+    repositories {
+        maven {
+            url "https://repository-cdn.liferay.com/nexus/content/groups/public"
+        }
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.liferay.workspace"
+
+rootProject.name = "liferay"
+
+include ":keycloak-saml"
