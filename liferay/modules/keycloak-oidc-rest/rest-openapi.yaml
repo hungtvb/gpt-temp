@@ -1,0 +1,66 @@
+components:
+    schemas:
+        AccessToken:
+            additionalProperties: true
+            description: "Raw OAuth 2.0 token response stored by Liferay as a JSON string."
+            type: object
+        TokenContext:
+            properties:
+                accessToken:
+                    $ref: "#/components/schemas/AccessToken"
+                    readOnly: true
+                accessTokenExpirationDate:
+                    format: date-time
+                    readOnly: true
+                    type: string
+                authenticated:
+                    readOnly: true
+                    type: boolean
+                authServerWellKnownURI:
+                    readOnly: true
+                    type: string
+                clientId:
+                    readOnly: true
+                    type: string
+                expired:
+                    readOnly: true
+                    type: boolean
+                hasAccessToken:
+                    readOnly: true
+                    type: boolean
+                issuer:
+                    readOnly: true
+                    type: string
+                keycloak:
+                    readOnly: true
+                    type: boolean
+                sessionId:
+                    readOnly: true
+                    type: string
+                userId:
+                    format: int64
+                    readOnly: true
+                    type: integer
+            type: object
+info:
+    description: "Local proof-of-concept API for inspecting the current Liferay OIDC/Keycloak token context."
+    license:
+        name: Apache 2.0
+        url: http://www.apache.org/licenses/LICENSE-2.0.html
+    title: Keycloak OIDC Token Context
+    version: v1.0
+openapi: 3.0.1
+paths:
+    "/token-context":
+        get:
+            description: "Returns the current authenticated user's Liferay OIDC token context."
+            operationId: getTokenContext
+            responses:
+                200:
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/TokenContext"
+                401:
+                    description: "The request is not authenticated."
+            tags: ["TokenContext"]
