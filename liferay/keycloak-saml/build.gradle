@@ -1,4 +1,5 @@
 dependencies {
     compileOnly group: "com.liferay.portal", name: "release.portal.api"
+    compileOnly group: "com.liferay", name: "com.liferay.saml.api"
     compileOnly group: "com.liferay", name: "com.liferay.saml.persistence.api"
 }
