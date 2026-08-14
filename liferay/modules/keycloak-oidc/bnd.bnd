@@ -1,0 +1,3 @@
+Bundle-Name: Keycloak Liferay OIDC Checker
+Bundle-SymbolicName: com.acme.keycloak.oidc.checker
+Bundle-Version: 1.0.0
