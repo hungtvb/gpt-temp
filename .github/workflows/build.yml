@@ -1,0 +1,27 @@
+name: Liferay Build
+
+on:
+  push:
+    branches: [feat/keycloak-liferay-saml]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: liferay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: gradle --version
+      - run: gradle :modules:keycloak-saml:build --no-daemon --stacktrace
+      - run: gradle :modules:keycloak-oidc:build --no-daemon --stacktrace
+      - run: gradle :modules:keycloak-oidc-rest:buildREST --no-daemon --stacktrace
+      - run: gradle :modules:keycloak-oidc-rest:build --no-daemon --stacktrace

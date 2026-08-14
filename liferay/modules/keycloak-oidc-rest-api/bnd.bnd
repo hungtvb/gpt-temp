@@ -1,0 +1,6 @@
+Bundle-Name: Keycloak Liferay OIDC REST API
+Bundle-SymbolicName: com.acme.keycloak.oidc.rest.api
+Bundle-Version: 1.0.0
+Export-Package:\
+    com.acme.keycloak.oidc.rest.dto.v1_0,\
+    com.acme.keycloak.oidc.rest.resource.v1_0

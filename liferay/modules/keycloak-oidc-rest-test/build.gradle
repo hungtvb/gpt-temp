@@ -1,0 +1,4 @@
+dependencies {
+    testIntegrationImplementation project(":keycloak-oidc-rest-api")
+    testIntegrationImplementation group: "com.liferay.portal", name: "release.dxp.api"
+}
