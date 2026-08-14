@@ -10,6 +10,8 @@ import java.util.Date;
  */
 public interface KeycloakTokenContext {
 
+    String REQUEST_ATTRIBUTE = KeycloakTokenContext.class.getName();
+
     String getAuthServerWellKnownURI();
 
     String getClientId();
