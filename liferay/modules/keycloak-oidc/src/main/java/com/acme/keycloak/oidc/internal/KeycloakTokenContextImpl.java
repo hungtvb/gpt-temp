@@ -29,26 +29,34 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
             return Optional.empty();
         }
 
-        long currentUserId = PortalUtil.getUserId(request);
+        HttpServletRequest originalRequest =
+            PortalUtil.getOriginalServletRequest(request);
+
+        long currentUserId = PortalUtil.getUserId(originalRequest);
 
         if (currentUserId <= 0) {
             return Optional.empty();
         }
 
-        HttpSession httpSession = request.getSession(false);
+        HttpSession httpSession = originalRequest.getSession(false);
 
         if (httpSession == null) {
             return Optional.empty();
         }
 
+        Object webSessionAttribute = httpSession.getAttribute(
+            OpenIdConnectWebKeys.OPEN_ID_CONNECT_SESSION);
+
+        if (!(webSessionAttribute instanceof
+                com.liferay.portal.security.sso.openid.connect.OpenIdConnectSession)) {
+            return Optional.empty();
+        }
+
         com.liferay.portal.security.sso.openid.connect.OpenIdConnectSession webSession =
             (com.liferay.portal.security.sso.openid.connect.OpenIdConnectSession)
-                httpSession.getAttribute(
-                    OpenIdConnectWebKeys.OPEN_ID_CONNECT_SESSION);
+                webSessionAttribute;
 
-        if (webSession == null ||
-            webSession.getLoginUserId() != currentUserId) {
-
+        if (webSession.getLoginUserId() != currentUserId) {
             return Optional.empty();
         }
 
