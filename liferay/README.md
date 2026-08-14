@@ -2,14 +2,14 @@
 
 Target platform: `dxp-2026.q1.4-lts`.
 
-This workspace is intended to compile and validate the `keycloak-saml` module against the Jakarta-based DXP 2026.Q1 LTS line.
+This workspace validates the `keycloak-saml` module against the Jakarta-based DXP 2026.Q1 LTS line.
 
 ## Build
 
 From this directory:
 
 ```cmd
-gradle :keycloak-saml:build --no-daemon --stacktrace
+gradle :modules:keycloak-saml:build --no-daemon --stacktrace
 ```
 
 The GitHub Actions workflow runs the same build with Java 21.

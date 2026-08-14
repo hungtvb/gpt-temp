@@ -20,4 +20,4 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       - run: gradle --version
-      - run: gradle :keycloak-saml:build --no-daemon --stacktrace
+      - run: gradle :modules:keycloak-saml:build --no-daemon --stacktrace
