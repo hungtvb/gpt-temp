@@ -4,8 +4,8 @@ import com.acme.keycloak.oidc.api.KeycloakTokenContext;
 import com.acme.keycloak.oidc.api.KeycloakTokenContextService;
 import com.liferay.portal.kernel.exception.PortalException;
 import com.liferay.portal.kernel.util.PortalUtil;
-import com.liferay.portal.security.sso.openid.connect.OpenIdConnectSession;
-import com.liferay.portal.security.sso.openid.connect.OpenIdConnectSessionProvider;
+import com.liferay.portal.security.sso.openid.connect.constants.OpenIdConnectWebKeys;
+import com.liferay.portal.security.sso.openid.connect.persistence.model.OpenIdConnectSession;
 import com.liferay.portal.security.sso.openid.connect.persistence.service.OpenIdConnectSessionLocalService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,27 +43,27 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
             return Optional.empty();
         }
 
-        OpenIdConnectSession webSession =
-            _openIdConnectSessionProvider.getOpenIdConnectSession(
-                httpSession);
+        Object sessionIdAttribute = httpSession.getAttribute(
+            OpenIdConnectWebKeys.OPEN_ID_CONNECT_SESSION_ID);
 
-        if (webSession == null ||
-            webSession.getLoginUserId() != currentUserId) {
-
+        if (!(sessionIdAttribute instanceof Long)) {
             return Optional.empty();
         }
 
-        String accessToken = webSession.getAccessTokenValue();
+        OpenIdConnectSession session = _fetchSession(
+            ((Long)sessionIdAttribute).longValue(), currentUserId);
+
+        if (session == null) {
+            return Optional.empty();
+        }
+
+        String accessToken = session.getAccessTokenValue();
 
         if (accessToken == null || accessToken.isBlank()) {
             return Optional.empty();
         }
 
-        com.liferay.portal.security.sso.openid.connect.persistence.model.OpenIdConnectSession sessionModel =
-            _fetchSessionModel(httpSession, currentUserId);
-
-        return Optional.of(
-            _toContext(webSession, sessionModel, accessToken));
+        return Optional.of(_toContext(session, accessToken));
     }
 
     @Override
@@ -77,20 +77,13 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
         ).orElse(false);
     }
 
-    private com.liferay.portal.security.sso.openid.connect.persistence.model.OpenIdConnectSession _fetchSessionModel(
-        HttpSession httpSession, long currentUserId) {
-
-        Object sessionIdAttribute = httpSession.getAttribute(
-            "OPEN_ID_CONNECT_SESSION_ID");
-
-        if (!(sessionIdAttribute instanceof Long)) {
-            return null;
-        }
+    private OpenIdConnectSession _fetchSession(
+        long sessionPrimaryKey, long currentUserId) {
 
         try {
-            com.liferay.portal.security.sso.openid.connect.persistence.model.OpenIdConnectSession session =
+            OpenIdConnectSession session =
                 _openIdConnectSessionLocalService.getOpenIdConnectSession(
-                    ((Long)sessionIdAttribute).longValue());
+                    sessionPrimaryKey);
 
             if (session.getUserId() != currentUserId) {
                 return null;
@@ -104,60 +97,38 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
     }
 
     private KeycloakTokenContext _toContext(
-        OpenIdConnectSession webSession,
-        com.liferay.portal.security.sso.openid.connect.persistence.model.OpenIdConnectSession sessionModel,
-        String accessToken) {
+        OpenIdConnectSession session, String accessToken) {
 
         return new KeycloakTokenContext() {
 
             @Override
             public String getAuthServerWellKnownURI() {
-                if (sessionModel != null) {
-                    return sessionModel.getAuthServerWellKnownURI();
-                }
-
-                return null;
+                return session.getAuthServerWellKnownURI();
             }
 
             @Override
             public String getClientId() {
-                if (sessionModel != null) {
-                    return sessionModel.getClientId();
-                }
-
-                return null;
+                return session.getClientId();
             }
 
             @Override
             public String getIssuer() {
-                if (sessionModel != null) {
-                    return sessionModel.getIssuer();
-                }
-
-                return webSession.getOpenIdProviderName();
+                return session.getIssuer();
             }
 
             @Override
             public String getSessionId() {
-                if (sessionModel != null) {
-                    return sessionModel.getSessionId();
-                }
-
-                return null;
+                return session.getSessionId();
             }
 
             @Override
             public long getUserId() {
-                return webSession.getLoginUserId();
+                return session.getUserId();
             }
 
             @Override
             public Date getAccessTokenExpirationDate() {
-                if (sessionModel != null) {
-                    return sessionModel.getAccessTokenExpirationDate();
-                }
-
-                return null;
+                return session.getAccessTokenExpirationDate();
             }
 
             @Override
@@ -167,7 +138,7 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
 
             @Override
             public boolean isAccessTokenExpired() {
-                Date expirationDate = getAccessTokenExpirationDate();
+                Date expirationDate = session.getAccessTokenExpirationDate();
 
                 return expirationDate != null &&
                     expirationDate.before(new Date());
@@ -179,13 +150,10 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
                     return false;
                 }
 
-                return keycloakIssuer.equals(getIssuer());
+                return keycloakIssuer.equals(session.getIssuer());
             }
         };
     }
-
-    @Reference
-    private OpenIdConnectSessionProvider _openIdConnectSessionProvider;
 
     @Reference
     private OpenIdConnectSessionLocalService _openIdConnectSessionLocalService;
