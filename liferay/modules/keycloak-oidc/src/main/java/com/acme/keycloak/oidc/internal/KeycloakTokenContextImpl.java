@@ -23,6 +23,10 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
     public Optional<KeycloakTokenContext> getCurrent(
         HttpServletRequest request) {
 
+        if (request == null) {
+            return Optional.empty();
+        }
+
         long userId = PortalUtil.getUserId(request);
 
         if (userId <= 0) {
@@ -45,6 +49,17 @@ public class KeycloakTokenContextImpl implements KeycloakTokenContextService {
         ).findFirst().map(
             KeycloakTokenContextImpl::toContext
         );
+    }
+
+    @Override
+    public boolean hasKeycloakToken(
+        HttpServletRequest request, String keycloakIssuer) {
+
+        return getCurrent(request).map(
+            context -> context.hasAccessToken() &&
+                !context.isAccessTokenExpired() &&
+                context.isKeycloak(keycloakIssuer)
+        ).orElse(false);
     }
 
     private static KeycloakTokenContext toContext(
