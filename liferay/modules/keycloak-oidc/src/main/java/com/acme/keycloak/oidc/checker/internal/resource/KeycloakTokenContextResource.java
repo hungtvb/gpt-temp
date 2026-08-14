@@ -9,15 +9,17 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Diagnostic REST endpoint for verifying the current Liferay OIDC context.
- * Never returns the raw access token.
+ * Does not return the raw access token.
  */
 @Component(
     property = {
@@ -35,29 +37,26 @@ public class KeycloakTokenContextResource {
         KeycloakTokenContext context =
             _keycloakTokenContextService.getCurrent(request).orElse(null);
 
+        Map<String, Object> body = new LinkedHashMap<>();
+
         if (context == null) {
-            return Response.ok(
-                "{\"authenticated\":false,\"keycloak\":false,\"hasAccessToken\":false}"
-            ).build();
+            body.put("authenticated", false);
+            body.put("keycloak", false);
+            body.put("hasAccessToken", false);
+        }
+        else {
+            body.put("authenticated", true);
+            body.put("keycloak", true);
+            body.put("hasAccessToken", context.hasAccessToken());
+            body.put("expired", context.isAccessTokenExpired());
+            body.put("issuer", context.getIssuer());
+            body.put("clientId", context.getClientId());
+            body.put("userId", context.getUserId());
         }
 
-        String json = String.format(
-            "{\"authenticated\":true,\"keycloak\":true,\"hasAccessToken\":%s,\"expired\":%s,\"issuer\":%s,\"clientId\":%s,\"userId\":%d}",
-            context.hasAccessToken(),
-            context.isAccessTokenExpired(),
-            quote(context.getIssuer()),
-            quote(context.getClientId()),
-            context.getUserId());
-
-        return Response.ok(json).build();
-    }
-
-    private String quote(String value) {
-        if (value == null) {
-            return "null";
-        }
-
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return Response.ok(body)
+            .type(MediaType.APPLICATION_JSON)
+            .build();
     }
 
     @Reference
