@@ -23,3 +23,5 @@ jobs:
       - run: gradle --version
       - run: gradle :modules:keycloak-saml:build --no-daemon --stacktrace
       - run: gradle :modules:keycloak-oidc:build --no-daemon --stacktrace
+      - run: gradle :modules:keycloak-oidc-rest:buildREST --no-daemon --stacktrace
+      - run: gradle :modules:keycloak-oidc-rest:build --no-daemon --stacktrace
